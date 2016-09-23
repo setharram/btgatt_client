@@ -1496,7 +1496,7 @@ static void init_fail(struct discovery_op *op)
 	gatt_db_clear(client->db);
 }
 
-static bool gatt_client_init(struct bt_gatt_client *client, uint16_t mtu)
+static bool gatt_client_init(struct bt_gatt_client *client, uint16_t mtu, bt_uuid_t *uuid)
 {
 	struct discovery_op *op;
 
@@ -1530,7 +1530,7 @@ static bool gatt_client_init(struct bt_gatt_client *client, uint16_t mtu)
 
 discover:
 	client->discovery_req = bt_gatt_discover_all_primary_services(
-							client->att, NULL,
+							client->att,uuid,
 							discover_primary_cb,
 							discovery_op_ref(op),
 							discovery_op_unref);
@@ -1742,7 +1742,28 @@ struct bt_gatt_client *bt_gatt_client_new(struct gatt_db *db,
 	if (!client)
 		return NULL;
 
-	if (!gatt_client_init(client, mtu)) {
+	if (!gatt_client_init(client, mtu,NULL)) {
+		bt_gatt_client_free(client);
+		return NULL;
+	}
+
+	return bt_gatt_client_ref(client);
+}
+
+struct bt_gatt_client *bt_gatt_client_uuid_new(struct gatt_db *db,
+							struct bt_att *att,
+							uint16_t mtu, bt_uuid_t *uuid)
+{
+	struct bt_gatt_client *client;
+
+	if (!att || !db)
+		return NULL;
+
+	client = gatt_client_new(db, att);
+	if (!client)
+		return NULL;
+
+	if (!gatt_client_init(client, mtu,uuid)) {
 		bt_gatt_client_free(client);
 		return NULL;
 	}

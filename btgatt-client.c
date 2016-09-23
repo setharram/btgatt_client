@@ -175,7 +175,7 @@ static void service_removed_cb(struct gatt_db_attribute *attr, void *user_data)
 	log_service_event(attr, "Service Removed");
 }
 
-static struct client *client_create(int fd, uint16_t mtu)
+static struct client *client_create(int fd, uint16_t mtu, bt_uuid_t *uuid)
 {
 	struct client *cli;
 
@@ -217,7 +217,7 @@ static struct client *client_create(int fd, uint16_t mtu)
 		return NULL;
 	}
 
-	cli->gatt = bt_gatt_client_new(cli->db, cli->att, mtu);
+	cli->gatt = bt_gatt_client_uuid_new(cli->db, cli->att, mtu,uuid);
 	if (!cli->gatt) {
 		fprintf(stderr, "Failed to create GATT client\n");
 		gatt_db_unref(cli->db);
@@ -1493,6 +1493,7 @@ static void usage(void)
 		"\t-s, --security-level <sec> \tSet security level (low|"
 								"medium|high)\n"
 		"\t-v, --verbose\t\t\tEnable extra logging\n"
+		"\t-g, --gatt-discovery <uuid>\tGATT discovery by uuid, e.g 0x180D\n"
 		"\t-h, --help\t\t\tDisplay help\n");
 }
 
@@ -1501,6 +1502,7 @@ static struct option main_options[] = {
 	{ "dest",		1, 0, 'd' },
 	{ "type",		1, 0, 't' },
 	{ "mtu",		1, 0, 'm' },
+	{ "gatt-discovery",	1, 0, 'g' },
 	{ "security-level",	1, 0, 's' },
 	{ "verbose",		0, 0, 'v' },
 	{ "help",		0, 0, 'h' },
@@ -1515,12 +1517,14 @@ int main(int argc, char *argv[])
 	uint8_t dst_type = BDADDR_LE_PUBLIC;
 	bool dst_addr_given = false;
 	bdaddr_t src_addr, dst_addr;
+	bt_uuid_t uuid_gt;
 	int dev_id = -1;
 	int fd;
 	sigset_t mask;
 	struct client *cli;
+	uuid_gt.type = BT_UUID_UNSPEC;
 
-	while ((opt = getopt_long(argc, argv, "+hvs:m:t:d:i:",
+	while ((opt = getopt_long(argc, argv, "+hvs:g:m:t:d:i:",
 						main_options, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
@@ -1528,6 +1532,16 @@ int main(int argc, char *argv[])
 			return EXIT_SUCCESS;
 		case 'v':
 			verbose = true;
+			break;
+		case 'g': {
+
+			bt_string_to_uuid(&uuid_gt,optarg);
+			if (uuid_gt.type == BT_UUID_UNSPEC) {
+				fprintf(stderr, "Invalid UUID \n");
+				return EXIT_FAILURE;
+			}
+			printf("\nGatt Discovery started by 0x%04x uuid\n",uuid_gt.value.u16);
+			}
 			break;
 		case 's':
 			if (strcmp(optarg, "low") == 0)
@@ -1625,7 +1639,11 @@ int main(int argc, char *argv[])
 	if (fd < 0)
 		return EXIT_FAILURE;
 
-	cli = client_create(fd, mtu);
+	if (uuid_gt.type == BT_UUID_UNSPEC)
+		cli = client_create(fd, mtu, NULL);
+	else
+		cli = client_create(fd, mtu, &uuid_gt);
+
 	if (!cli) {
 		close(fd);
 		return EXIT_FAILURE;
